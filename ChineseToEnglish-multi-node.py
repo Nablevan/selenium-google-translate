@@ -7,7 +7,9 @@ import traceback
 import logging
 import warnings
 import threading
+import multiprocessing
 from sys import argv
+from multiprocessing import Process
 from selenium import webdriver
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -197,44 +199,47 @@ def main_multi_thread(sub_xml_list):
     result_list = os.listdir(result_path)
     begin_time = time.time()
     num = 0
-    failed = open(os.path.join(result_path, 'failed.txt'), 'a', encoding='utf-8')
-    for name in sub_xml_list:
-        if name in result_list:  # 跳过已经翻译的文件
-            continue
-        if not os.path.isfile(os.path.join(path, name)):  # 跳过文件夹
-            continue
-        if name.split('.')[-1] != 'xml':  # 跳过非xml文件
-            continue
-        start_time = time.time()
-        try:
-            translate_xml(os.path.join(path, name), browser)
-        except Exception:     # 记录错误文件和信息
-            if os.path.exists(os.path.join(result_path, name)):
-                os.remove(os.path.join(result_path, name))
-            failed.write(os.path.join(path, name) + '\n')
-            warnings.warn(name + ' error', RuntimeWarning)
-            logging.error(os.path.join(path, name))
-            logging.error(traceback.format_exc())
-            continue
-        num += 1
-        end_time = time.time()
-        average = (end_time - begin_time) / num
-        print(threading.current_thread().name + ' ' + name + ' use %.2f seconds ' % float(end_time - start_time)
-              + 'average: %.2f seconds' % average)
-    failed.close()
+    with open(os.path.join(result_path, 'failed.txt'), 'a', encoding='utf-8') as failed:
+        for name in sub_xml_list:
+            if name in result_list:  # 跳过已经翻译的文件
+                continue
+            if not os.path.isfile(os.path.join(path, name)):  # 跳过文件夹
+                continue
+            if name.split('.')[-1] != 'xml':  # 跳过非xml文件
+                continue
+            start_time = time.time()
+            try:
+                translate_xml(os.path.join(path, name), browser)
+            except Exception:     # 记录错误文件和信息
+                if os.path.exists(os.path.join(result_path, name)):
+                    os.remove(os.path.join(result_path, name))
+                failed.write(os.path.join(path, name) + '\n')
+                warnings.warn(name + ' error', RuntimeWarning)
+                logging.error(os.path.join(path, name))
+                logging.error(traceback.format_exc())
+                continue
+            num += 1
+            end_time = time.time()
+            average = (end_time - begin_time) / num
+            print(threading.current_thread().name + ' ' + name + ' use %.2f seconds ' % float(end_time - start_time)
+                  + 'average: %.2f seconds' % average)
     browser.quit()
 
 
 if __name__ == '__main__':
     # 单线程
     # path = argv[1]
+    # fold = os.path.split(path)[-1]
+    # result_path = os.path.join('', '{}-result'.format(fold))
     # result_path = os.path.join(path, 'result')
     # main()
 
     # 多线程
 
     path = argv[1]
-    result_path = os.path.join(path, 'result')
+    fold = os.path.split(path)[-1]
+    result_path = os.path.join('', '{}-result'.format(fold))
+    # result_path = os.path.join(path, 'result')
     if not os.path.exists(result_path):   # 创建result文件夹用于存放结果
         os.mkdir(result_path)
 
