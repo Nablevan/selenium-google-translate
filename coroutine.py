@@ -60,8 +60,9 @@ def translate_xml(xml_file: str, bw: webdriver.Chrome):
     file_name = os.path.split(xml_file)[-1]
     file_name = os.path.join(result_path, file_name)
 
-    with open(file_name, 'w', encoding='utf-8')as f:
-        tree.writexml(f, encoding='utf-8')
+    # with open(file_name, 'w', encoding='utf-8')as f:
+    #     tree.writexml(f, encoding='utf-8')
+    return [file_name, tree]
 
 
 def xml_to_list(xml_tree):   # 获取待翻译的文字列表
@@ -136,7 +137,7 @@ def translate_list(txt_list: list, bw: webdriver.Chrome):
     return result_list
 
 
-async def main():
+async def main(temp_list: list):
 
     # url = 'https://translate.google.cn'
     url = 'https://translate.google.cn/#view=home&op=translate&sl=zh-CN&tl=en'
@@ -157,6 +158,7 @@ async def main():
     begin_time = time.time()
     num = 0
     failed = open(os.path.join(result_path, 'failed.txt'), 'w', encoding='utf-8')
+    list_to_write = temp_list
     for name in xml_list:
         if name in result_list:  # 跳过已经翻译的文件
             continue
@@ -166,7 +168,14 @@ async def main():
             continue
         start_time = time.time()
         try:
-            translate_xml(os.path.join(path, name), browser)
+            target = translate_xml(os.path.join(path, name), browser)
+
+            while True:
+                await asyncio.sleep(1)
+                if list_to_write.__len__() < 100:
+                    list_to_write.append(target)
+                    break
+
         except Exception:     # 记录错误文件和信息
             if os.path.exists(os.path.join(result_path, name)):
                 os.remove(os.path.join(result_path, name))
@@ -181,6 +190,24 @@ async def main():
         print(name + ' use %.2f seconds ' % float(end_time - start_time) + 'average: %.2f seconds' % average)
     failed.close()
     browser.quit()
+
+
+async def write_xml(temp_list: list):
+    count = 0
+    while True:
+        await asyncio.sleep(1)
+        count += 1
+        while temp_list.__len__() > 0:
+            start = time.time()
+            count = 0
+            temp = temp_list.pop(0)
+            with open(temp[0], 'w', encoding='utf-8')as f:
+                temp[1].writexml(f, encoding='utf-8')
+            print('done writing', temp[0], 'in {} secs'.format(time.time() - start))
+        if count > 5:
+            # event_loop = asyncio.get_running_loop()
+            # event_loop.stop()
+            return
 
 
 def main_multi_thread(sub_xml_list):
@@ -234,7 +261,14 @@ if __name__ == '__main__':
     result_path = os.path.join('', '{}-result'.format(fold))
     # result_path = os.path.join(path, 'result')
     # main_task = asyncio.create_task(main())
-    asyncio.run(main())
+    l: list = []
+    task1 = main(l)
+    task2 = write_xml(l)
+
+    loop = asyncio.get_event_loop()
+
+    asyncio.get_event_loop().run_until_complete(asyncio.gather(task1, task2))
+
     print('done')
     # loop = asyncio.get_event_loop()
     # loop.run_until_complete(main_task)
