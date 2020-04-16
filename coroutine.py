@@ -137,7 +137,7 @@ def translate_list(txt_list: list, bw: webdriver.Chrome):
     return result_list
 
 
-async def main(temp_list: list):
+async def main(list_temp: list):
 
     # url = 'https://translate.google.cn'
     url = 'https://translate.google.cn/#view=home&op=translate&sl=zh-CN&tl=en'
@@ -158,7 +158,7 @@ async def main(temp_list: list):
     begin_time = time.time()
     num = 0
     failed = open(os.path.join(result_path, 'failed.txt'), 'w', encoding='utf-8')
-    list_to_write = temp_list
+    list_to_write = list_temp
     for name in xml_list:
         if name in result_list:  # 跳过已经翻译的文件
             continue
@@ -192,25 +192,44 @@ async def main(temp_list: list):
     browser.quit()
 
 
-async def write_xml(temp_list: list):
+async def write_xml(list_temp: list):
     count = 0
     while True:
         await asyncio.sleep(1)
         count += 1
-        while temp_list.__len__() > 0:
+        while list_temp.__len__() > 0:
             start = time.time()
             count = 0
-            temp = temp_list.pop(0)
+            temp = list_temp.pop(0)
             with open(temp[0], 'w', encoding='utf-8')as f:
                 temp[1].writexml(f, encoding='utf-8')
-            print('done writing', temp[0], 'in {} secs'.format(time.time() - start))
+            print('done writing', temp[0], 'in {:.5f} secs'.format(time.time() - start))
         if count > 5:
             # event_loop = asyncio.get_running_loop()
             # event_loop.stop()
             return
 
 
-def main_multi_thread(sub_xml_list):
+def write_xml(list_temp: list):
+    time.sleep(10)
+    count = 0
+    while True:
+        time.sleep(1)
+        count += 1
+        while list_temp.__len__() > 0:
+            start = time.time()
+            count = 0
+            temp = list_temp.pop(0)
+            with open(temp[0], 'w', encoding='utf-8')as f:
+                temp[1].writexml(f, encoding='utf-8')
+            print('done writing', temp[0], 'in {:.5f} secs'.format(time.time() - start))
+        if count > 5:
+            # event_loop = asyncio.get_running_loop()
+            # event_loop.stop()
+            return
+
+
+def main_multi_thread(sub_xml_list, list_temp: list):
     # url = 'https://translate.google.cn'
     url = 'https://translate.google.cn/#view=home&op=translate&sl=zh-CN&tl=en'
     browser = webdriver.Chrome()
@@ -237,7 +256,8 @@ def main_multi_thread(sub_xml_list):
                 continue
             start_time = time.time()
             try:
-                translate_xml(os.path.join(path, name), browser)
+                result = translate_xml(os.path.join(path, name), browser)
+                list_temp.append(result)
             except Exception:     # 记录错误文件和信息
                 if os.path.exists(os.path.join(result_path, name)):
                     os.remove(os.path.join(result_path, name))
@@ -256,44 +276,44 @@ def main_multi_thread(sub_xml_list):
 
 if __name__ == '__main__':
     # 单线程
-    path = argv[1]
-    fold = os.path.split(path)[-1]
-    result_path = os.path.join('', '{}-result'.format(fold))
-    # result_path = os.path.join(path, 'result')
-    # main_task = asyncio.create_task(main())
-    l: list = []
-    task1 = main(l)
-    task2 = write_xml(l)
-
-    loop = asyncio.get_event_loop()
-
-    asyncio.get_event_loop().run_until_complete(asyncio.gather(task1, task2))
-
-    print('done')
+    # path = argv[1]
+    # fold = os.path.split(path)[-1]
+    # result_path = os.path.join('', '{}-result'.format(fold))
+    # l: list = []
+    # task1 = main(l)
+    # task2 = write_xml(l)
+    #
     # loop = asyncio.get_event_loop()
-    # loop.run_until_complete(main_task)
+    #
+    # asyncio.get_event_loop().run_until_complete(asyncio.gather(task1, task2))
+    #
+    # print('done')
 
     # 多线程
 
-    # path = argv[1]
-    # result_path = os.path.join(path, 'result')
-    # if not os.path.exists(result_path):   # 创建result文件夹用于存放结果
-    #     os.mkdir(result_path)
-    #
-    # xml_list = os.listdir(path)
-    # num_thread = 3
-    # num_xml = xml_list.__len__()//num_thread
-    # n = 0
-    # while n < num_thread - 1:
-    #     sub_list = []
-    #     for x in range(num_xml):
-    #         sub_list.append(xml_list.pop(0))
-    #
-    #     t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(sub_list,))
-    #     t.start()
-    #     n += 1
-    # t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(xml_list,))
-    # t.start()
-    # t.join()
-    # print('done')
+    path = argv[1]
+    fold = os.path.split(path)[-1]
+    result_path = os.path.join('', '{}-result'.format(fold))
+    if not os.path.exists(result_path):   # 创建result文件夹用于存放结果
+        os.mkdir(result_path)
+
+    xml_list = os.listdir(path)
+    num_thread = 3
+    num_xml = xml_list.__len__()//num_thread
+    n = 0
+    temp_list = []
+    while n < num_thread - 1:
+        sub_list = []
+        for x in range(num_xml):
+            sub_list.append(xml_list.pop(0))
+
+        t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(sub_list, temp_list))
+        t.start()
+        n += 1
+    t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(xml_list, temp_list))
+    t.start()
+    t = threading.Thread(target=write_xml, name='thread-write', args=(temp_list,))
+    t.start()
+    t.join()
+    print('done')
 
