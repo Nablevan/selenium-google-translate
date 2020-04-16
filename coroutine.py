@@ -211,22 +211,21 @@ async def write_xml(list_temp: list):
 
 
 def write_xml(list_temp: list):
-    time.sleep(10)
-    count = 0
-    while True:
+    while threads.__len__() > 0:    # 当有爬虫进程还活着
         time.sleep(1)
-        count += 1
         while list_temp.__len__() > 0:
             start = time.time()
-            count = 0
             temp = list_temp.pop(0)
             with open(temp[0], 'w', encoding='utf-8')as f:
                 temp[1].writexml(f, encoding='utf-8')
             print('done writing', temp[0], 'in {:.5f} secs'.format(time.time() - start))
-        if count > 5:
-            # event_loop = asyncio.get_running_loop()
-            # event_loop.stop()
-            return
+    # 死光以后
+    while list_temp.__len__() > 0:
+        start = time.time()
+        temp = list_temp.pop(0)
+        with open(temp[0], 'w', encoding='utf-8')as f:
+            temp[1].writexml(f, encoding='utf-8')
+        print('done writing', temp[0], 'in {:.5f} secs'.format(time.time() - start))
 
 
 def main_multi_thread(sub_xml_list, list_temp: list):
@@ -271,6 +270,7 @@ def main_multi_thread(sub_xml_list, list_temp: list):
             average = (end_time - begin_time) / num
             print(threading.current_thread().name + ' ' + name + ' use %.2f seconds ' % float(end_time - start_time)
                   + 'average: %.2f seconds' % average)
+    threads.remove(threading.current_thread().getName())
     browser.quit()
 
 
@@ -302,6 +302,7 @@ if __name__ == '__main__':
     num_xml = xml_list.__len__()//num_thread
     n = 0
     temp_list = []
+    threads = []
     while n < num_thread - 1:
         sub_list = []
         for x in range(num_xml):
@@ -309,9 +310,11 @@ if __name__ == '__main__':
 
         t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(sub_list, temp_list))
         t.start()
+        threads.append(t.getName())
         n += 1
     t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(xml_list, temp_list))
     t.start()
+    threads.append(t.getName())
     t = threading.Thread(target=write_xml, name='thread-write', args=(temp_list,))
     t.start()
     t.join()
