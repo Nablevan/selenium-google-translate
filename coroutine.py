@@ -27,10 +27,10 @@ def translate(bw: webdriver.Chrome, txt: str):
 
     bw.execute_script(js)    # 通过js输入，提高速度
 
-    WebDriverWait(bw, 10, poll_frequency=0.01).until(EC.staleness_of(re))
+    WebDriverWait(bw, 30, poll_frequency=0.01).until(EC.staleness_of(re))
 
     locator = (By.CSS_SELECTOR, '.result-shield-container')
-    WebDriverWait(bw, 10, poll_frequency=0.01).until(EC.presence_of_element_located(locator))
+    WebDriverWait(bw, 30, poll_frequency=0.01).until(EC.presence_of_element_located(locator))
     try:
         r = bw.find_element_by_css_selector('.result-shield-container>.translation')
     except selenium.common.exceptions.NoSuchElementException:
@@ -214,18 +214,18 @@ def write_xml(list_temp: list):
     while threads.__len__() > 0:    # 当有爬虫进程还活着
         time.sleep(1)
         while list_temp.__len__() > 0:
-            start = time.time()
+            # start = time.time()
             temp = list_temp.pop(0)
             with open(temp[0], 'w', encoding='utf-8')as f:
                 temp[1].writexml(f, encoding='utf-8')
-            print('done writing', temp[0], 'in {:.5f} secs'.format(time.time() - start))
+            # print('done writing', temp[0], 'in {:.5f} secs'.format(time.time() - start))
     # 死光以后
     while list_temp.__len__() > 0:
-        start = time.time()
+        # start = time.time()
         temp = list_temp.pop(0)
         with open(temp[0], 'w', encoding='utf-8')as f:
             temp[1].writexml(f, encoding='utf-8')
-        print('done writing', temp[0], 'in {:.5f} secs'.format(time.time() - start))
+        # print('done writing', temp[0], 'in {:.5f} secs'.format(time.time() - start))
 
 
 def main_multi_thread(sub_xml_list, list_temp: list):
@@ -298,7 +298,7 @@ if __name__ == '__main__':
         os.mkdir(result_path)
 
     xml_list = os.listdir(path)
-    num_thread = 3
+    num_thread = 7
     num_xml = xml_list.__len__()//num_thread
     n = 0
     temp_list = []
