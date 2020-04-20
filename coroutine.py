@@ -19,7 +19,11 @@ from xml.dom.minidom import parse
 
 
 def translate(bw: webdriver.Chrome, txt: str):
-    re = bw.find_element_by_css_selector('.result-shield-container')
+    try:
+        re = bw.find_element_by_css_selector('.result-shield-container')
+    except selenium.common.exceptions.NoSuchElementException:
+        time.sleep(1)
+        re = bw.find_element_by_css_selector('.result-shield-container')
 
     js = "element = document.getElementById('source');" \
          "element.value = '" + txt + "';"
