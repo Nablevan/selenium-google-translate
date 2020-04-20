@@ -228,11 +228,21 @@ def write_xml(list_temp: list):
         # print('done writing', temp[0], 'in {:.5f} secs'.format(time.time() - start))
 
 
+def write_failed(name):
+    with open(os.path.join(result_path, 'failed.txt'), 'a', encoding='utf-8') as failed:
+        failed.write(os.path.join(path, name) + '\n')
+
+
 def main_multi_thread(sub_xml_list, list_temp: list):
     # url = 'https://translate.google.cn'
-    url = 'https://translate.google.cn/#view=home&op=translate&sl=zh-CN&tl=en'
-    browser = webdriver.Chrome()
-    browser.implicitly_wait(3)
+    # url = 'https://translate.google.cn/#view=home&op=translate&sl=zh-CN&tl=en'  # 中译英
+    url = 'https://translate.google.cn/#view=home&op=translate&sl=en&tl=zh-CN'   # 英译中
+    options = webdriver.ChromeOptions()
+    options.add_argument("--headless")     # 无界面模式
+    options.add_argument("--disable-gpu")
+    browser = webdriver.Chrome(chrome_options=options)
+    # browser = webdriver.PhantomJS()
+    browser.implicitly_wait(30)
     browser.get(url)
     browser.minimize_window()
 
@@ -245,31 +255,33 @@ def main_multi_thread(sub_xml_list, list_temp: list):
     result_list = os.listdir(result_path)
     begin_time = time.time()
     num = 0
-    with open(os.path.join(result_path, 'failed.txt'), 'a', encoding='utf-8') as failed:
-        for name in sub_xml_list:
-            if name in result_list:  # 跳过已经翻译的文件
-                continue
-            if not os.path.isfile(os.path.join(path, name)):  # 跳过文件夹
-                continue
-            if name.split('.')[-1] != 'xml':  # 跳过非xml文件
-                continue
-            start_time = time.time()
-            try:
-                result = translate_xml(os.path.join(path, name), browser)
-                list_temp.append(result)
-            except Exception:     # 记录错误文件和信息
-                if os.path.exists(os.path.join(result_path, name)):
-                    os.remove(os.path.join(result_path, name))
-                failed.write(os.path.join(path, name) + '\n')
-                warnings.warn(name + ' error', RuntimeWarning)
-                logging.error(os.path.join(path, name))
-                logging.error(traceback.format_exc())
-                continue
-            num += 1
-            end_time = time.time()
-            average = (end_time - begin_time) / num
-            print(threading.current_thread().name + ' ' + name + ' use %.2f seconds ' % float(end_time - start_time)
-                  + 'average: %.2f seconds' % average)
+    # with open(os.path.join(result_path, 'failed.txt'), 'a', encoding='utf-8') as failed:
+    for name in sub_xml_list:
+        if name in result_list:  # 跳过已经翻译的文件
+            continue
+        if not os.path.isfile(os.path.join(path, name)):  # 跳过文件夹
+            continue
+        if name.split('.')[-1] != 'xml':  # 跳过非xml文件
+            continue
+        start_time = time.time()
+        try:
+            result = translate_xml(os.path.join(path, name), browser)
+            list_temp.append(result)
+        except Exception:     # 记录错误文件和信息
+            if os.path.exists(os.path.join(result_path, name)):
+                os.remove(os.path.join(result_path, name))
+            write_failed(name)
+            os.system('copy {} {}'.format(os.path.join(path, name), os.path.join(result_path, name)))
+            # failed.write(os.path.join(path, name) + '\n')
+            warnings.warn(name + ' error', RuntimeWarning)
+            logging.error(os.path.join(path, name))
+            logging.error(traceback.format_exc())
+            continue
+        num += 1
+        end_time = time.time()
+        average = (end_time - begin_time) / num
+        print(threading.current_thread().name + ' ' + name + ' use %.2f seconds ' % float(end_time - start_time)
+              + 'average: %.2f seconds' % average)
     threads.remove(threading.current_thread().getName())
     browser.quit()
 
