@@ -19,11 +19,8 @@ from xml.dom.minidom import parse
 
 
 def translate(bw: webdriver.Chrome, txt: str):
-    try:
-        re = bw.find_element_by_css_selector('.result-shield-container')
-    except selenium.common.exceptions.NoSuchElementException:
-        time.sleep(1)
-        re = bw.find_element_by_css_selector('.result-shield-container')
+
+    re = bw.find_element_by_css_selector('.result-shield-container')
 
     js = "element = document.getElementById('source');" \
          "element.value = '" + txt + "';"
@@ -129,9 +126,24 @@ def translate_list(txt_list: list, bw: webdriver.Chrome):
             # print('*******************')
             # print(buffer, end='')
             # print('*******************')
-            result_txt = translate(bw, buffer.strip())
-            result_list += result_txt.split('\n')
-            buffer = ''  # 重置buffer
+            if buffer.__len__() == 0:  # 单个节点长度超过5000了
+                temp = str(txt_list.pop(0)).replace('"', '\\"').replace("'", "\\'").replace('&', '& ')
+                temps = []
+                while temp.__len__() > 4997:
+                    index = temp.find('。', 4000)
+                    temps.append(temp[:index + 1])
+                    temp = temp[index + 1:]
+                temps.append(temp)
+                temp_result = ''
+                for txt in temps:
+                    temp_result += translate(bw, txt.strip())
+                result_txt = str(temp_result).replace('& ', '&amp;')
+                result_list.append(result_txt)
+            else:
+                result_txt = translate(bw, buffer.strip())
+                result_txt = str(result_txt).replace('& ', '&amp;')
+                result_list += result_txt.split('\n')
+                buffer = ''  # 重置buffer
     if buffer.__len__() > 0:
         # print('last*******************')
         # print(buffer, end='')
@@ -139,79 +151,6 @@ def translate_list(txt_list: list, bw: webdriver.Chrome):
         result_txt = translate(bw, buffer.strip())
         result_list += result_txt.split('\n')
     return result_list
-
-
-async def main(list_temp: list):
-
-    # url = 'https://translate.google.cn'
-    url = 'https://translate.google.cn/#view=home&op=translate&sl=zh-CN&tl=en'
-    browser = webdriver.Chrome()
-    browser.implicitly_wait(3)
-    browser.get(url)
-    s = browser.find_element_by_id('source')
-    s.send_keys('开始')    # 初始化浏览器
-
-    if not os.path.exists(result_path):   # 创建result文件夹用于存放结果
-        os.mkdir(result_path)
-
-    logging.basicConfig(filename=os.path.join(result_path, 'log.txt'), level=logging.ERROR,
-                        format='%(asctime)s - %(levelname)s - %(message)s')
-
-    xml_list = os.listdir(path)
-    result_list = os.listdir(result_path)
-    begin_time = time.time()
-    num = 0
-    failed = open(os.path.join(result_path, 'failed.txt'), 'w', encoding='utf-8')
-    list_to_write = list_temp
-    for name in xml_list:
-        if name in result_list:  # 跳过已经翻译的文件
-            continue
-        if not os.path.isfile(os.path.join(path, name)):  # 跳过文件夹
-            continue
-        if name.split('.')[-1] != 'xml':  # 跳过非xml文件
-            continue
-        start_time = time.time()
-        try:
-            target = translate_xml(os.path.join(path, name), browser)
-
-            while True:
-                await asyncio.sleep(1)
-                if list_to_write.__len__() < 100:
-                    list_to_write.append(target)
-                    break
-
-        except Exception:     # 记录错误文件和信息
-            if os.path.exists(os.path.join(result_path, name)):
-                os.remove(os.path.join(result_path, name))
-            failed.write(os.path.join(path, name) + '\n')
-            warnings.warn(name + ' error', RuntimeWarning)
-            logging.error(os.path.join(path, name))
-            logging.error(traceback.format_exc())
-            continue
-        num += 1
-        end_time = time.time()
-        average = (end_time - begin_time) / num
-        print(name + ' use %.2f seconds ' % float(end_time - start_time) + 'average: %.2f seconds' % average)
-    failed.close()
-    browser.quit()
-
-
-async def write_xml(list_temp: list):
-    count = 0
-    while True:
-        await asyncio.sleep(1)
-        count += 1
-        while list_temp.__len__() > 0:
-            start = time.time()
-            count = 0
-            temp = list_temp.pop(0)
-            with open(temp[0], 'w', encoding='utf-8')as f:
-                temp[1].writexml(f, encoding='utf-8')
-            print('done writing', temp[0], 'in {:.5f} secs'.format(time.time() - start))
-        if count > 5:
-            # event_loop = asyncio.get_running_loop()
-            # event_loop.stop()
-            return
 
 
 def write_xml(list_temp: list):
@@ -237,10 +176,59 @@ def write_failed(name):
         failed.write(os.path.join(path, name) + '\n')
 
 
+def main(list_temp: list):
+
+    # url = 'https://translate.google.cn'
+    url = 'https://translate.google.cn/#view=home&op=translate&sl=zh-CN&tl=en'  # 中译英
+    # url = 'https://translate.google.cn/#view=home&op=translate&sl=en&tl=zh-CN'  # 英译中
+    browser = webdriver.Chrome()
+    browser.implicitly_wait(3)
+    browser.get(url)
+    s = browser.find_element_by_id('source')
+    s.send_keys('开始')    # 初始化浏览器
+
+    if not os.path.exists(result_path):   # 创建result文件夹用于存放结果
+        os.mkdir(result_path)
+
+    logging.basicConfig(filename=os.path.join(result_path, 'log.txt'), level=logging.ERROR,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+
+    # xml_list = os.listdir(path)
+    result_list = os.listdir(result_path)
+    begin_time = time.time()
+    num = 0
+    for name in xml_list:
+        if name in result_list:  # 跳过已经翻译的文件
+            continue
+        if not os.path.isfile(os.path.join(path, name)):  # 跳过文件夹
+            continue
+        if name.split('.')[-1] != 'xml':  # 跳过非xml文件
+            continue
+        start_time = time.time()
+        try:
+            result = translate_xml(os.path.join(path, name), browser)
+            list_temp.append(result)
+
+        except Exception:     # 记录错误文件和信息
+            if os.path.exists(os.path.join(result_path, name)):
+                os.remove(os.path.join(result_path, name))
+            write_failed(name)
+            warnings.warn(name + ' error', RuntimeWarning)
+            logging.error(os.path.join(path, name))
+            logging.error(traceback.format_exc())
+            continue
+        num += 1
+        end_time = time.time()
+        average = (end_time - begin_time) / num
+        print(name + ' use %.2f seconds ' % float(end_time - start_time) + 'average: %.2f seconds' % average)
+    threads.remove(threading.current_thread().getName())
+    browser.quit()
+
+
 def main_multi_thread(sub_xml_list, list_temp: list):
     # url = 'https://translate.google.cn'
-    # url = 'https://translate.google.cn/#view=home&op=translate&sl=zh-CN&tl=en'  # 中译英
-    url = 'https://translate.google.cn/#view=home&op=translate&sl=en&tl=zh-CN'   # 英译中
+    url = 'https://translate.google.cn/#view=home&op=translate&sl=zh-CN&tl=en'  # 中译英
+    # url = 'https://translate.google.cn/#view=home&op=translate&sl=en&tl=zh-CN'   # 英译中
     options = webdriver.ChromeOptions()
     options.add_argument("--headless")     # 无界面模式
     options.add_argument("--disable-gpu")
@@ -295,13 +283,18 @@ if __name__ == '__main__':
     # path = argv[1]
     # fold = os.path.split(path)[-1]
     # result_path = os.path.join('', '{}-result'.format(fold))
-    # l: list = []
-    # task1 = main(l)
-    # task2 = write_xml(l)
+    # if not os.path.exists(result_path):   # 创建result文件夹用于存放结果
+    #     os.mkdir(result_path)
     #
-    # loop = asyncio.get_event_loop()
-    #
-    # asyncio.get_event_loop().run_until_complete(asyncio.gather(task1, task2))
+    # xml_list = os.listdir(path)
+    # temp_list = []
+    # threads = []
+    # t = threading.Thread(target=main, name='thread-0', args=(temp_list,))
+    # t.start()
+    # threads.append(t.getName())
+    # t = threading.Thread(target=write_xml, name='thread-write', args=(temp_list,))
+    # t.start()
+    # t.join()
     #
     # print('done')
 
@@ -314,7 +307,7 @@ if __name__ == '__main__':
         os.mkdir(result_path)
 
     xml_list = os.listdir(path)
-    num_thread = 7
+    num_thread = 3
     num_xml = xml_list.__len__()//num_thread
     n = 0
     temp_list = []
