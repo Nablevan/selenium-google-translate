@@ -2,6 +2,7 @@ import asyncio
 import time
 import xml
 import os
+import re
 import pyperclip
 import selenium
 import traceback
@@ -50,8 +51,13 @@ def translate_xml(xml_file: str, bw: webdriver.Chrome):
     temp = os.path.join(path, 'temp-%s.xml' % threading.current_thread().name)
     with open(temp, 'w', encoding='utf-8') as w:        # 创建临时文件
         w.write(file)
-    tree = parse(temp)
-
+    try:
+        tree = parse(temp)
+    except xml.parsers.expat.ExpatError:
+        file = re.sub(r'&(?!amp;)', r'&amp;', file)    # 替换掉xml文件中的&
+        with open(temp, 'w', encoding='utf-8') as w:  # 重新创建临时文件
+            w.write(file)
+        tree = parse(temp)                # 重新解析xml
     os.remove(temp)       # 删除临时文件
     root = tree.documentElement   # 根节点
     txt_list = xml_to_list(tree)
@@ -117,7 +123,8 @@ def translate_list(txt_list: list, bw: webdriver.Chrome):
     buffer = ''
     while txt_list.__len__() > 0:
         temp_txt = txt_list[0]
-        temp_txt = str(temp_txt).replace('"', '\\"').replace("'", "\\'")
+        temp_txt = str(temp_txt).replace('\n', '\\n').replace('"', '\\"').replace("'", "\\'")
+        temp_txt = temp_txt.replace('&', '& ')
         # print('add temp:' + temp_txt)
         if buffer.__len__() + len(temp_txt) + 1 < 5000:         # 加1是因为\n也算一个字符
             buffer = buffer + temp_txt + '\\n'
@@ -126,13 +133,14 @@ def translate_list(txt_list: list, bw: webdriver.Chrome):
             # print('*******************')
             # print(buffer, end='')
             # print('*******************')
-            if buffer.__len__() == 0:  # 单个节点长度超过5000了
-                temp = str(txt_list.pop(0)).replace('"', '\\"').replace("'", "\\'").replace('&', '& ')
+            if buffer.__len__() == 0:     # 单个节点长度超过5000了
+                temp = str(txt_list.pop(0)).replace('\n', '\\n').replace('"', '\\"').replace("'", "\\'")\
+                    .replace('&', '& ')
                 temps = []
                 while temp.__len__() > 4997:
-                    index = temp.find('。', 4000)
-                    temps.append(temp[:index + 1])
-                    temp = temp[index + 1:]
+                    index = temp.find('.', 4000)
+                    temps.append(temp[:index+1])
+                    temp = temp[index+1:]
                 temps.append(temp)
                 temp_result = ''
                 for txt in temps:

@@ -2,6 +2,7 @@ import asyncio
 import time
 import xml
 import os
+import re
 import pyperclip
 import selenium
 import traceback
@@ -20,7 +21,7 @@ from xml.dom.minidom import parse
 
 def translate(bw: webdriver.Chrome, txt: str):
 
-    re = bw.find_element_by_css_selector('.result-shield-container')
+    res = bw.find_element_by_css_selector('.result-shield-container')
 
     js = "element = document.getElementById('source');" \
          "element.value = '" + txt + "';"
@@ -28,7 +29,7 @@ def translate(bw: webdriver.Chrome, txt: str):
 
     bw.execute_script(js)    # 通过js输入，提高速度
 
-    WebDriverWait(bw, 30, poll_frequency=0.01).until(EC.staleness_of(re))
+    WebDriverWait(bw, 30, poll_frequency=0.01).until(EC.staleness_of(res))
 
     locator = (By.CSS_SELECTOR, '.result-shield-container')
     WebDriverWait(bw, 30, poll_frequency=0.01).until(EC.presence_of_element_located(locator))
@@ -50,8 +51,13 @@ def translate_xml(xml_file: str, bw: webdriver.Chrome):
     temp = os.path.join(path, 'temp-%s.xml' % threading.current_thread().name)
     with open(temp, 'w', encoding='utf-8') as w:        # 创建临时文件
         w.write(file)
-    tree = parse(temp)
-
+    try:
+        tree = parse(temp)
+    except xml.parsers.expat.ExpatError:
+        file = re.sub(r'&(?!amp;)', r'&amp;', file)    # 替换掉xml文件中的&
+        with open(temp, 'w', encoding='utf-8') as w:  # 重新创建临时文件
+            w.write(file)
+        tree = parse(temp)                # 重新解析xml
     os.remove(temp)       # 删除临时文件
     root = tree.documentElement   # 根节点
     txt_list = xml_to_list(tree)
@@ -119,7 +125,7 @@ def translate_list(txt_list: list, bw: webdriver.Chrome):
     buffer = ''
     while txt_list.__len__() > 0:
         temp_txt = txt_list[0]
-        temp_txt = str(temp_txt).replace('"', '\\"').replace("'", "\\'")
+        temp_txt = str(temp_txt).replace('\n', '\\n').replace('"', '\\"').replace("'", "\\'")
         temp_txt = temp_txt.replace('&', '& ')
         # print('add temp:' + temp_txt)
         if buffer.__len__() + len(temp_txt) + 1 < 5000:         # 加1是因为\n也算一个字符
@@ -130,7 +136,8 @@ def translate_list(txt_list: list, bw: webdriver.Chrome):
             # print(buffer, end='')
             # print('*******************')
             if buffer.__len__() == 0:     # 单个节点长度超过5000了
-                temp = str(txt_list.pop(0)).replace('"', '\\"').replace("'", "\\'").replace('&', '& ')
+                temp = str(txt_list.pop(0)).replace('\n', '\\n').replace('"', '\\"').replace("'", "\\'")\
+                    .replace('&', '& ')
                 temps = []
                 while temp.__len__() > 4997:
                     index = temp.find('.', 4000)
@@ -283,27 +290,6 @@ def main_multi_thread(sub_xml_list, list_temp: list):
 
 if __name__ == '__main__':
     # 单线程
-    # path = argv[1]
-    # fold = os.path.split(path)[-1]
-    # result_path = os.path.join('', '{}-result'.format(fold))
-    # if not os.path.exists(result_path):   # 创建result文件夹用于存放结果
-    #     os.mkdir(result_path)
-    #
-    # xml_list = os.listdir(path)
-    # temp_list = []
-    # threads = []
-    # t = threading.Thread(target=main, name='thread-0', args=(temp_list,))
-    # t.start()
-    # # t.run()
-    # threads.append(t.getName())
-    # t = threading.Thread(target=write_xml, name='thread-write', args=(temp_list,))
-    # t.start()
-    # t.join()
-    #
-    # print('done')
-
-    # 多线程
-
     path = argv[1]
     fold = os.path.split(path)[-1]
     result_path = os.path.join('', '{}-result'.format(fold))
@@ -311,25 +297,46 @@ if __name__ == '__main__':
         os.mkdir(result_path)
 
     xml_list = os.listdir(path)
-    num_thread = 7
-    num_xml = xml_list.__len__()//num_thread
-    n = 0
     temp_list = []
     threads = []
-    while n < num_thread - 1:
-        sub_list = []
-        for x in range(num_xml):
-            sub_list.append(xml_list.pop(0))
-
-        t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(sub_list, temp_list))
-        t.start()
-        threads.append(t.getName())
-        n += 1
-    t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(xml_list, temp_list))
+    t = threading.Thread(target=main, name='thread-0', args=(temp_list,))
     t.start()
+    # t.run()
     threads.append(t.getName())
     t = threading.Thread(target=write_xml, name='thread-write', args=(temp_list,))
     t.start()
     t.join()
+
     print('done')
+
+    # 多线程
+
+    # path = argv[1]
+    # fold = os.path.split(path)[-1]
+    # result_path = os.path.join('', '{}-result'.format(fold))
+    # if not os.path.exists(result_path):   # 创建result文件夹用于存放结果
+    #     os.mkdir(result_path)
+    #
+    # xml_list = os.listdir(path)
+    # num_thread = 7
+    # num_xml = xml_list.__len__()//num_thread
+    # n = 0
+    # temp_list = []
+    # threads = []
+    # while n < num_thread - 1:
+    #     sub_list = []
+    #     for x in range(num_xml):
+    #         sub_list.append(xml_list.pop(0))
+    #
+    #     t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(sub_list, temp_list))
+    #     t.start()
+    #     threads.append(t.getName())
+    #     n += 1
+    # t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(xml_list, temp_list))
+    # t.start()
+    # threads.append(t.getName())
+    # t = threading.Thread(target=write_xml, name='thread-write', args=(temp_list,))
+    # t.start()
+    # t.join()
+    # print('done')
 
