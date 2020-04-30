@@ -54,7 +54,8 @@ def translate_xml(xml_file: str, bw: webdriver.Chrome):
     try:
         tree = parse(temp)
     except xml.parsers.expat.ExpatError:
-        file = re.sub(r'&(?!amp;)', r'&amp;', file)    # 替换掉xml文件中的&
+        # file = re.sub(r'&(?!amp;)', r'&amp;', file)    # 替换掉xml文件中的&
+        file = xml_repair(temp)
         with open(temp, 'w', encoding='utf-8') as w:  # 重新创建临时文件
             w.write(file)
         tree = parse(temp)                # 重新解析xml
@@ -70,6 +71,56 @@ def translate_xml(xml_file: str, bw: webdriver.Chrome):
     # with open(file_name, 'w', encoding='utf-8')as f:
     #     tree.writexml(f, encoding='utf-8')
     return [file_name, tree]
+
+
+def xml_repair(xml_file):
+    file = ''
+    with open(xml_file, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+        f.close()
+    for line in lines:
+        line = list(line)
+        temp = ''
+        to_repair = ''
+        state = True         # True 为标签外的
+        while line.__len__() > 0:
+            i = line.pop(0)
+            if i != '<'and i != '>':
+                if state:
+                    to_repair += i
+                else:
+                    temp += i
+                continue
+            if i == '<':
+                state = False
+                if to_repair.__len__() > 0:
+                    temp = temp + xml_repair_2(to_repair) + i
+                    to_repair = ''
+                else:
+                    temp += i
+                continue
+            if i == '>':
+                state = True
+                if to_repair.__len__() > 0:
+                    temp = temp + xml_repair_2(to_repair) + i
+                    to_repair = ''
+                else:
+                    temp += i
+                continue
+        if to_repair.__len__() > 0:
+            temp = temp + xml_repair_2(to_repair)
+        file += temp
+        # file.replace('“', '"').replace('”', '"')
+
+    return file
+
+
+def xml_repair_2(txt):
+    txt = re.sub('&(?!amp;)', '&amp;', txt)      # 替换掉xml文件中的&
+    txt = re.sub('"(?!quot;)', '&quot;', txt)
+    txt = re.sub('\'(?!apos;)', '&apos;', txt)
+
+    return txt
 
 
 def xml_to_list(xml_tree):   # 获取待翻译的文字列表
@@ -138,7 +189,9 @@ def translate_list(txt_list: list, bw: webdriver.Chrome):
                     .replace('&', '& ')
                 temps = []
                 while temp.__len__() > 4997:
-                    index = temp.find('.', 4000)
+                    index = temp.find('.', 4000, 4999)
+                    if index == -1:      # 如果一句话超过5000字符
+                        index = temp.find(' ', 4000, 4999)
                     temps.append(temp[:index+1])
                     temp = temp[index+1:]
                 temps.append(temp)
@@ -152,11 +205,13 @@ def translate_list(txt_list: list, bw: webdriver.Chrome):
                 result_txt = str(result_txt).replace('& ', '&amp;')
                 result_list += result_txt.split('\n')
                 buffer = ''  # 重置buffer
+
     if buffer.__len__() > 0:
         # print('last*******************')
         # print(buffer, end='')
         # print('*******************last')
         result_txt = translate(bw, buffer.strip())
+        result_txt = str(result_txt).replace('& ', '&amp;')
         result_list += result_txt.split('\n')
     return result_list
 
@@ -236,15 +291,15 @@ def main(list_temp: list):
 def main_multi_thread(sub_xml_list, list_temp: list):
     # url = 'https://translate.google.cn'
     url = 'https://translate.google.cn/#view=home&op=translate&sl=zh-CN&tl=en'  # 中译英
-    # url = 'https://translate.google.cn/#view=home&op=translate&sl=en&tl=zh-CN'   # 英译中
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")     # 无界面模式
+    # options.add_argument("--headless")     # 无界面模式
+    options.add_argument("–incognito")  # 隐私模式，不用清cookie
     options.add_argument("--disable-gpu")
     browser = webdriver.Chrome(chrome_options=options)
-    # browser = webdriver.PhantomJS()
-    browser.implicitly_wait(30)
-    browser.get(url)
     browser.minimize_window()
+    # browser = webdriver.PhantomJS()
+    browser.implicitly_wait(60)
+    browser.get(url)
 
     s = browser.find_element_by_id('source')
     s.send_keys('开始')  # 初始化浏览器
@@ -267,7 +322,8 @@ def main_multi_thread(sub_xml_list, list_temp: list):
         try:
             result = translate_xml(os.path.join(path, name), browser)
             list_temp.append(result)
-        except Exception:     # 记录错误文件和信息
+            # browser.delete_all_cookies()
+        except Exception:  # 记录错误文件和信息
             if os.path.exists(os.path.join(result_path, name)):
                 os.remove(os.path.join(result_path, name))
             write_failed(name)
@@ -282,6 +338,19 @@ def main_multi_thread(sub_xml_list, list_temp: list):
         average = (end_time - begin_time) / num
         print(threading.current_thread().name + ' ' + name + ' use %.2f seconds ' % float(end_time - start_time)
               + 'average: %.2f seconds' % average)
+        if num % 20 == 0:
+            browser.get('chrome://settings/clearBrowserData')
+            time.sleep(5)
+            # 清缓存
+            js = "document.getElementsByTagName('settings-ui')[0].shadowRoot.children[5].children[2].shadowRoot." \
+                 "children[4].shadowRoot.children[1].children[6].children[0].shadowRoot.children[1].shadowRoot." \
+                 "children[1].children[3].children[2].click()"
+            browser.execute_script(js)
+            time.sleep(15)
+
+            browser.get(url)
+            s = browser.find_element_by_id('source')
+            s.send_keys('开始')  # 初始化浏览器
     threads.remove(threading.current_thread().getName())
     browser.quit()
 
@@ -289,8 +358,12 @@ def main_multi_thread(sub_xml_list, list_temp: list):
 if __name__ == '__main__':
     # 单线程
     # path = argv[1]
+    # try:
+    #     result_p = argv[2]
+    # except IndexError:
+    #     result_p = ''
     # fold = os.path.split(path)[-1]
-    # result_path = os.path.join('', '{}-result'.format(fold))
+    # result_path = os.path.join(result_p, '{}-result'.format(fold))
     # if not os.path.exists(result_path):   # 创建result文件夹用于存放结果
     #     os.mkdir(result_path)
     #
@@ -299,6 +372,7 @@ if __name__ == '__main__':
     # threads = []
     # t = threading.Thread(target=main, name='thread-0', args=(temp_list,))
     # t.start()
+    # # t.run()
     # threads.append(t.getName())
     # t = threading.Thread(target=write_xml, name='thread-write', args=(temp_list,))
     # t.start()
@@ -309,8 +383,12 @@ if __name__ == '__main__':
     # 多线程
 
     path = argv[1]
+    try:
+        result_p = argv[2]
+    except IndexError:
+        result_p = ''
     fold = os.path.split(path)[-1]
-    result_path = os.path.join('', '{}-result'.format(fold))
+    result_path = os.path.join(result_p, '{}-result'.format(fold))
     if not os.path.exists(result_path):   # 创建result文件夹用于存放结果
         os.mkdir(result_path)
 
