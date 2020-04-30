@@ -293,12 +293,13 @@ def main_multi_thread(sub_xml_list, list_temp: list):
     # url = 'https://translate.google.cn'
     url = 'https://translate.google.cn/#view=home&op=translate&sl=en&tl=zh-CN'  # 英译中
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")     # 无界面模式
+    # options.add_argument("--headless")     # 无界面模式
     options.add_argument("–incognito")   # 隐私模式，不用清cookie
     options.add_argument("--disable-gpu")
     browser = webdriver.Chrome(chrome_options=options)
+    browser.minimize_window()
     # browser = webdriver.PhantomJS()
-    browser.implicitly_wait(30)
+    browser.implicitly_wait(60)
     browser.get(url)
 
     s = browser.find_element_by_id('source')
@@ -340,6 +341,7 @@ def main_multi_thread(sub_xml_list, list_temp: list):
               + 'average: %.2f seconds' % average)
         if num % 20 == 0:
             browser.get('chrome://settings/clearBrowserData')
+            time.sleep(5)
             # 清缓存
             js = "document.getElementsByTagName('settings-ui')[0].shadowRoot.children[5].children[2].shadowRoot." \
                  "children[4].shadowRoot.children[1].children[6].children[0].shadowRoot.children[1].shadowRoot." \
