@@ -237,7 +237,7 @@ def write_xml(list_temp: list):
 
 
 def write_failed(name):
-    with open(os.path.join(result_path, 'failed.txt'), 'a', encoding='utf-8') as failed:
+    with open(os.path.join('log', '{}-failed.txt'.format(fold)), 'a', encoding='utf-8') as failed:
         failed.write(os.path.join(path, name) + '\n')
 
 
@@ -355,6 +355,80 @@ def main_multi_thread(sub_xml_list, list_temp: list):
     threads.remove(threading.current_thread().getName())
     browser.quit()
 
+def main_multi_thread_2(list_temp: list):
+    # url = 'https://translate.google.cn'
+    url = 'https://translate.google.cn/#view=home&op=translate&sl=zh-CN&tl=en'  # 中译英
+    options = webdriver.ChromeOptions()
+    # options.add_argument("--headless")     # 无界面模式
+    options.add_argument("–incognito")  # 隐私模式，不用清cookie
+    options.add_argument("--disable-gpu")
+    browser = webdriver.Chrome(chrome_options=options)
+    browser.minimize_window()
+
+    browser.implicitly_wait(60)
+    browser.get(url)
+
+    s = browser.find_element_by_id('source')
+    s.send_keys('开始')  # 初始化浏览器
+
+    logging.basicConfig(filename=os.path.join('log', '{}-log.txt'.format(fold)), level=logging.ERROR,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+
+    result_list = os.listdir(result_path)
+    begin_time = time.time()
+    num = 0
+    # with open(os.path.join(result_path, 'failed.txt'), 'a', encoding='utf-8') as failed:
+    while xml_list.__len__() > 0:
+        lock.acquire()
+        try:
+            name = xml_list.pop(0)
+        except:
+            continue
+        finally:
+            lock.release()
+        if name in result_list:  # 跳过已经翻译的文件
+            continue
+        if not os.path.isfile(os.path.join(path, name)):  # 跳过文件夹
+            continue
+        if name.split('.')[-1] != 'xml':  # 跳过非xml文件
+            continue
+        start_time = time.time()
+        try:
+            result = translate_xml(os.path.join(path, name), browser)
+            list_temp.append(result)
+            # browser.delete_all_cookies()
+        except Exception:  # 记录错误文件和信息
+            if os.path.exists(os.path.join(result_path, name)):
+                os.remove(os.path.join(result_path, name))
+            write_failed(name)
+            os.system('copy {} {}'.format(os.path.join(path, name), os.path.join(result_path, name)))
+            # failed.write(os.path.join(path, name) + '\n')
+            warnings.warn(name + ' error', RuntimeWarning)
+            logging.error(os.path.join(path, name))
+            logging.error(traceback.format_exc())
+            continue
+        num += 1
+        end_time = time.time()
+        average = (end_time - begin_time) / num
+        print(threading.current_thread().name + ' ' + name + ' use %.2f seconds ' % float(end_time - start_time)
+              + 'average: %.2f seconds' % average)
+        if num % 50 == 0:
+            browser.get('chrome://settings/clearBrowserData')
+            time.sleep(5)
+            # 清缓存
+            js = "document.getElementsByTagName('settings-ui')[0].shadowRoot.children[5].children[2].shadowRoot." \
+                 "children[4].shadowRoot.children[1].children[6].children[0].shadowRoot.children[1].shadowRoot." \
+                 "children[1].children[3].children[2].click()"
+            browser.execute_script(js)
+            time.sleep(15)
+
+            browser.get(url)
+            s = browser.find_element_by_id('source')
+            s.send_keys('开始')  # 初始化浏览器
+
+    threads.remove(threading.current_thread().getName())
+    browser.quit()
+
 
 if __name__ == '__main__':
     # 单线程
@@ -390,27 +464,35 @@ if __name__ == '__main__':
         result_p = ''
     fold = os.path.split(path)[-1]
     result_path = os.path.join(result_p, '{}-result'.format(fold))
-    if not os.path.exists(result_path):   # 创建result文件夹用于存放结果
+    if not os.path.exists(result_path):  # 创建result文件夹用于存放结果
         os.mkdir(result_path)
+    if not os.path.exists('log'):    # 创建log文件夹
+        os.mkdir('log')
 
+    lock = threading.Lock()  # 线程锁
     xml_list = os.listdir(path)
     num_thread = 5
-    num_xml = xml_list.__len__()//num_thread
+    # num_xml = xml_list.__len__()//num_thread
     n = 0
     temp_list = []
     threads = []
-    while n < num_thread - 1:
-        sub_list = []
-        for x in range(num_xml):
-            sub_list.append(xml_list.pop(0))
-
-        t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(sub_list, temp_list))
+    while n < num_thread:
+        t = threading.Thread(target=main_multi_thread_2, name='thread-%d' % n, args=(temp_list,))
         t.start()
         threads.append(t.getName())
         n += 1
-    t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(xml_list, temp_list))
-    t.start()
-    threads.append(t.getName())
+    # while n < num_thread - 1:
+    #     sub_list = []
+    #     for x in range(num_xml):
+    #         sub_list.append(xml_list.pop(0))
+    #
+    #     t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(sub_list, temp_list))
+    #     t.start()
+    #     threads.append(t.getName())
+    #     n += 1
+    # t = threading.Thread(target=main_multi_thread, name='thread-%d' % n, args=(xml_list, temp_list))
+    # t.start()
+    # threads.append(t.getName())
     t = threading.Thread(target=write_xml, name='thread-write', args=(temp_list,))
     t.start()
     t.join()
