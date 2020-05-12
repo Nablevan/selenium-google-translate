@@ -48,7 +48,8 @@ def translate_xml(xml_file: str, bw: webdriver.Chrome):
         while file[-1] is not '>':     # 去除末尾的空格
             file = file[:-1]
 
-    temp = os.path.join(path, 'temp-%s.xml' % threading.current_thread().name)
+    # temp = os.path.join(path, 'temp-%s.xml' % threading.current_thread().name)
+    temp = 'temp-%s.xml' % threading.current_thread().name
     with open(temp, 'w', encoding='utf-8') as w:        # 创建临时文件
         w.write(file)
     try:
@@ -357,7 +358,7 @@ def main_multi_thread(sub_xml_list, list_temp: list):
 
 def main_multi_thread_2(list_temp: list):
     # url = 'https://translate.google.cn'
-    url = 'https://translate.google.cn/#view=home&op=translate&sl=zh-CN&tl=en'  # 中译英
+    url = 'https://translate.google.cn/#view=home&op=translate&sl=en&tl=zh-CN'  # 英译中
     options = webdriver.ChromeOptions()
     # options.add_argument("--headless")     # 无界面模式
     options.add_argument("–incognito")  # 隐私模式，不用清cookie
@@ -411,9 +412,10 @@ def main_multi_thread_2(list_temp: list):
         end_time = time.time()
         average = (end_time - begin_time) / num
         print(threading.current_thread().name + ' ' + name + ' use %.2f seconds ' % float(end_time - start_time)
-              + 'average: %.2f seconds' % average)
-        if num % 50 == 0:
+              + 'average: %.2f seconds' % average, num % 20)
+        if num % 20 == 0:
             browser.get('chrome://settings/clearBrowserData')
+            print(threading.current_thread().name, 'clearing cache...')
             time.sleep(5)
             # 清缓存
             js = "document.getElementsByTagName('settings-ui')[0].shadowRoot.children[5].children[2].shadowRoot." \
