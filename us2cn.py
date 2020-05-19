@@ -366,7 +366,7 @@ def main_multi_thread_2(list_temp: list):
     browser = webdriver.Chrome(chrome_options=options)
     browser.minimize_window()
 
-    browser.implicitly_wait(60)
+    browser.implicitly_wait(300)
     browser.get(url)
 
     s = browser.find_element_by_id('source')
@@ -465,9 +465,11 @@ if __name__ == '__main__':
     except IndexError:
         result_p = ''
     fold = os.path.split(path)[-1]
-    result_path = os.path.join(result_p, '{}-result'.format(fold))
+    # result_path = os.path.join(result_p, '{}-result'.format(fold))
+    result_path = os.path.join(result_p, fold)
     if not os.path.exists(result_path):  # 创建result文件夹用于存放结果
         os.mkdir(result_path)
+        os.mkdir(result_path + '-translating')
     if not os.path.exists('log'):    # 创建log文件夹
         os.mkdir('log')
 
@@ -498,5 +500,6 @@ if __name__ == '__main__':
     t = threading.Thread(target=write_xml, name='thread-write', args=(temp_list,))
     t.start()
     t.join()
+    os.removedirs(result_path + '-translating')
     print('done')
 
