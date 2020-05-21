@@ -423,7 +423,8 @@ if __name__ == '__main__':
     result_path = os.path.join(result_p, fold)
     if not os.path.exists(result_path):  # 创建result文件夹用于存放结果
         os.mkdir(result_path)
-        os.mkdir(result_path + '-translating')
+        if not os.path.exists(result_path + '-translating'):
+            os.mkdir(result_path + '-translating')
     if not os.path.exists('log'):    # 创建log文件夹
         os.mkdir('log')
 
